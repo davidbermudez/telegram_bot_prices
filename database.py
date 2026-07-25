@@ -208,6 +208,29 @@ def crear_producto(
     return producto[0]
 
 
+def obtener_productos_monitorizacion():
+
+    conn = conectar()
+    cursor = conn.cursor()
+
+    cursor.execute(
+        """
+        SELECT
+            id,
+            url,
+            nombre,
+            precio_actual,
+            comercio_id
+        FROM productos
+        """
+    )
+
+    productos = cursor.fetchall()
+
+    conn.close()
+
+    return productos
+
 
 # -------------------------
 # Seguimientos

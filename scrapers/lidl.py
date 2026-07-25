@@ -1,7 +1,7 @@
-import requests
 from bs4 import BeautifulSoup
+import requests
 
-from database import obtener_config_scraper
+import database
 
 from exceptions import (
     PriceNotFoundError,
@@ -9,9 +9,6 @@ from exceptions import (
     ProductNotFoundError,
     NetworkError,
 )
-
-
-COMERCIO_ID = 1
 
 
 HEADERS = {
@@ -22,8 +19,7 @@ HEADERS = {
 }
 
 
-
-def obtener_producto(url):
+def obtener_producto(url, comercio_id):
 
     try:
 
@@ -44,11 +40,8 @@ def obtener_producto(url):
             "Producto no encontrado"
         )
 
-    try:
-        respuesta.raise_for_status()
 
-    except requests.HTTPError as e:
-        raise NetworkError(str(e))
+    respuesta.raise_for_status()
 
 
     soup = BeautifulSoup(
@@ -57,57 +50,47 @@ def obtener_producto(url):
     )
 
 
-    selector_nombre = obtener_config_scraper(
-        COMERCIO_ID,
+    selector_nombre = database.obtener_config_scraper(
+        comercio_id,
         "nombre"
     )
 
-
-    selector_precio = obtener_config_scraper(
-        COMERCIO_ID,
+    selector_precio = database.obtener_config_scraper(
+        comercio_id,
         "precio"
     )
 
 
-    if not selector_nombre:
-
-        raise ProductNameNotFoundError(
-            "No existe configuración para nombre"
-        )
-
-
-    if not selector_precio:
-
-        raise PriceNotFoundError(
-            "No existe configuración para precio"
-        )
-
-
-    titulo = soup.select_one(
+    nombre_elemento = soup.select_one(
         selector_nombre
     )
 
+    if nombre_elemento is None:
 
-    precio = soup.select_one(
+        raise ProductNameNotFoundError(
+            "No se encontró el nombre"
+        )
+
+
+    precio_elemento = soup.select_one(
         selector_precio
     )
 
-
-    if titulo is None:
-
-        raise ProductNameNotFoundError(
-            "No se ha encontrado el nombre"
-        )
-
-
-    if precio is None:
+    if precio_elemento is None:
 
         raise PriceNotFoundError(
-            "No se ha encontrado el precio"
+            "No se encontró el precio"
         )
+
+
+    nombre = (
+        nombre_elemento["content"]
+        if nombre_elemento.name == "meta"
+        else nombre_elemento.text.strip()
+    )
 
 
     return {
-        "nombre": titulo["content"],
-        "precio": precio.text.strip()
+        "nombre": nombre,
+        "precio": precio_elemento.text.strip()
     }

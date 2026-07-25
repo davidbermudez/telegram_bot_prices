@@ -19,17 +19,20 @@ def enviar_telegram(chat_id, mensaje):
 
 def comprobar_productos():
 
-    productos = database.obtener_productos()
+    productos = database.obtener_productos_monitorizacion()
 
     for producto in productos:
 
-        producto_id, url, nombre, precio_anterior = producto
+        producto_id, url, nombre, precio_anterior, comercio_id = producto
 
         try:
 
-            scraper = get_scraper(url)
+            scraper_info = get_scraper(url)
 
-            datos = scraper(url)
+            datos = scraper_info["funcion"](
+                url,
+                comercio_id
+            )
 
             precio_actual = datos["precio"]
 
@@ -96,7 +99,5 @@ def comprobar_productos():
 
 
 if __name__ == "__main__":
-
-    database.inicializar()
 
     comprobar_productos()

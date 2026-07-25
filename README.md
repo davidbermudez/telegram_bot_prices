@@ -1,335 +1,444 @@
-# BOT TELEGRAM PARA AVISAR DE CAMBIOS DE PRECIO
+# AlertPriceBot
 
-Bot de Telegram para monitorizar precios de productos y recibir notificaciones cuando cambien.
+Bot de Telegram para monitorizar precios de productos en comercios online y recibir notificaciones cuando cambien.
 
-El proyecto permite que varios usuarios añadan productos mediante Telegram y reciban automáticamente avisos cuando el precio del producto se modifique.
+El objetivo del proyecto es disponer de un sistema sencillo y extensible que permita a cualquier usuario añadir productos mediante una URL, realizar un seguimiento automático y recibir avisos cuando el precio detectado por el scraper cambie.
 
-Aunque inicialmente está orientado a productos de Lidl, la arquitectura está preparada para incorporar otros comercios mediante nuevos módulos de extracción de precios (*scrapers*).
+Actualmente soporta productos de Lidl y está preparado para incorporar nuevos comercios mediante una arquitectura basada en scrapers independientes.
 
 ---
 
 ## Características
 
-- 🤖 Bot de Telegram interactivo.
-- 👥 Soporte para múltiples usuarios.
-- 🛒 Cada usuario puede definir sus propios productos.
-- 🔎 Extracción automática del nombre y precio del producto.
-- 💾 Persistencia mediante SQLite.
-- 📉 Detección de cambios de precio.
-- 🔔 Notificaciones automáticas por Telegram.
-- ⏱️ Monitorización periódica mediante cron.
-- 🐍 Entorno virtual Python independiente.
+* 🤖 Integración con Telegram.
+* 🛒 Seguimiento personalizado de productos por usuario.
+* 🔎 Extracción automática de información desde páginas web.
+* 💶 Control del precio actual de cada producto.
+* 🔔 Avisos cuando el precio cambia.
+* 🏪 Arquitectura preparada para múltiples comercios.
+* ⚙️ Configuración de selectores HTML almacenada en base de datos.
+* 🗄️ Persistencia mediante SQLite.
+* 👥 Múltiples usuarios utilizando el mismo bot.
 
 ---
 
-# Arquitectura
+## Funcionamiento
 
-El proyecto está dividido en varios componentes:
+El flujo básico es:
 
 ```
-telegram_bot_prices/
-│
-├── bot.py # Bot Telegram e interacción con usuarios
-├── monitor.py # Proceso de comprobación de precios
-├── scraper.py # Extracción de datos de productos
-├── database.py # Gestión de base de datos SQLite
-├── config.py # Configuración del bot
-│
-├── precios.db # Base de datos SQLite
-├── requirements.txt # Dependencias Python
-│
-└── .venv/ # Entorno virtual Python
+Usuario
+   |
+   | /add URL
+   |
+   v
+Telegram Bot
+   |
+   v
+Router de comercios
+   |
+   v
+Scraper específico
+   |
+   v
+Base de datos
+   |
+   v
+Monitor periódico
+   |
+   v
+Notificación Telegram
 ```
----
-
 
 ---
 
-# Funcionamiento general
+# Comandos disponibles
 
-El sistema funciona mediante dos procesos independientes:
+## `/start`
 
-## Bot Telegram (`bot.py`)
-
-Proceso permanente encargado de:
-
-- Registrar usuarios.
-- Recibir comandos.
-- Añadir productos.
-- Mostrar seguimientos.
-- Eliminar seguimientos.
-
-Debe permanecer siempre activo.
-
-Se recomienda ejecutarlo como servicio `systemd`.
+Registra al usuario e inicia la interacción con el bot.
 
 ---
 
-## Monitor de precios (`monitor.py`)
+## `/add`
 
-Proceso periódico encargado de:
+Añade un producto al sistema de seguimiento.
 
-1. Obtener los productos registrados.
-2. Consultar el precio actual.
-3. Compararlo con el último precio almacenado.
-4. Notificar a los usuarios si existe un cambio.
-5. Actualizar el precio guardado.
+Ejemplo:
 
-Se ejecuta mediante `cron`.
+```
+/add https://www.lidl.es/p/...
+```
+
+El bot:
+
+1. Identifica el comercio.
+2. Ejecuta el scraper correspondiente.
+3. Obtiene nombre y precio.
+4. Guarda el producto.
+5. Crea el seguimiento para el usuario.
 
 ---
 
-# Requisitos
+## `/list`
 
-- Python 3.10 o superior.
-- Cuenta de Telegram.
-- Bot creado mediante BotFather.
-- Sistema Linux recomendado.
+Muestra los productos actualmente vigilados.
+
+Ejemplo:
+
+```
+📋 Tus seguimientos:
+
+1️⃣ Parkside Set de llaves de vaso
+💶 59.99€
+
+2️⃣ Taladro inalámbrico
+💶 89.99€
+```
+
+Los números mostrados al usuario no corresponden al ID interno de la base de datos.
+
+El sistema utiliza posiciones virtuales para evitar mostrar identificadores internos.
+
+---
+
+## `/remove`
+
+Elimina un seguimiento.
+
+Ejemplo:
+
+```
+/remove 2
+```
+
+El usuario elimina el segundo producto mostrado en `/list`.
+
+Internamente el bot resuelve la posición visible con el producto real asociado.
+
+---
+
+## `/help`
+
+Muestra la ayuda del bot.
+
+---
+
+# Arquitectura del proyecto
+
+Actualmente:
+
+```
+alert-prices-bot/
+
+├── bot.py
+├── monitor.py
+├── database.py
+├── config.py
+├── exceptions.py
+│
+├── scrapers/
+│   ├── router.py
+│   └── lidl.py
+│
+├── precios.db
+├── requirements.txt
+└── README.md
+```
+
+---
+
+# Componentes principales
+
+## bot.py
+
+Responsable de la comunicación con Telegram.
+
+Gestiona:
+
+* comandos;
+* conversaciones;
+* altas de productos;
+* consultas de usuario;
+* eliminación de seguimientos.
+
+No contiene lógica de scraping.
+
+---
+
+## monitor.py
+
+Proceso encargado de revisar periódicamente los precios almacenados.
+
+Normalmente se ejecuta mediante cron.
+
+Ejemplo:
+
+```
+0 * * * * /ruta/al/proyecto/.venv/bin/python /ruta/al/proyecto/monitor.py
+```
+
+Realiza:
+
+1. Consulta de productos activos.
+2. Ejecución del scraper correspondiente.
+3. Comparación con el precio almacenado.
+4. Envío de avisos si detecta cambios.
+
+---
+
+## scrapers/
+
+Contiene los módulos encargados de obtener información de cada comercio.
+
+Ejemplo:
+
+```
+scrapers/
+
+├── router.py
+└── lidl.py
+```
+
+El router determina qué scraper debe utilizarse según la URL.
+
+Ejemplo:
+
+```
+https://www.lidl.es/p/...
+        |
+        v
+     LidlScraper
+```
+
+---
+
+## database.py
+
+Capa de acceso a SQLite.
+
+Gestiona:
+
+* usuarios;
+* comercios;
+* configuración de scrapers;
+* productos;
+* seguimientos.
+
+---
+
+# Base de datos
+
+Tablas principales:
+
+## usuarios
+
+Usuarios registrados en Telegram.
+
+Campos principales:
+
+* id interno.
+* chat_id.
+* fecha de alta.
+
+---
+
+## comercios
+
+Catálogo de comercios soportados.
+
+Ejemplo:
+
+```
+1 | Lidl | lidl.es
+```
+
+---
+
+## scraper_config
+
+Configuración dinámica del scraper.
+
+Permite modificar selectores HTML sin cambiar código.
+
+Ejemplo:
+
+```
+nombre:
+meta[property='og:title']
+
+precio:
+div.ods-price__value
+```
+
+---
+
+## productos
+
+Productos monitorizados.
+
+Incluye:
+
+* URL.
+* nombre.
+* precio actual.
+* comercio asociado.
+* estado de última comprobación.
+
+---
+
+## seguimientos
+
+Relación entre usuarios y productos.
+
+Permite que varios usuarios puedan seguir el mismo producto.
 
 ---
 
 # Instalación
 
-Clonar o copiar el proyecto:
+## Requisitos
 
-```bash
-git clone https://github.com/davidbermudez/telegram_bot_prices.git
-cd telegram_bot_prices
-```
+* Python 3.10+
+* SQLite
+* Cuenta de Telegram
+* Bot creado mediante BotFather
 
-Crear un entorno virtual
+---
+
+## Crear entorno virtual
 
 ```
 python3 -m venv .venv
 ```
 
-Activarlo:
+Activar:
+
+Linux:
+
 ```
 source .venv/bin/activate
 ```
 
-Instalar dependencias
+Windows:
+
+```
+.venv\Scripts\activate
+```
+
+---
+
+## Instalar dependencias
 
 ```
 pip install -r requirements.txt
 ```
 
-En Telegram, crear un bot en @BotFather
+---
 
-Configura el bot en config.py con el token obtenido en Telegram
+## Configuración
 
-```
-BOT_TOKEN = "TOKEN_DEL_BOT"
-```
-
-## Inicialización de la base de datos
+Crear el archivo de configuración con el token del bot:
 
 ```
-python bot.py
-```
-Con ello se genera un archivo precios.db (SQLite) con las tablas:
-
-### usuarios
-
-Guarda los usuarios registrados.
-
-Campos principales:
-
-- id
-- chat_id
-- fecha_alta
-
-### productos
-
-Guarda los productos monitorizados.
-
-Campos principales:
-
-- id
-- url
-- nombre
-- precio
-
-### seguimientos
-
-Relaciona usuarios y productos.
-
-Permite que:
-
-- varios usuarios sigan un mismo producto;
-- un usuario siga múltiples productos.
-
-## Uso del  bot
-
-### Inicio
-
-El usuario inicia una conversación:
-
-    /start
-
-El bot registra automáticamente al usuario.
-
-### Añadir un producto
-
-Ejecutar:
-
-    /add
-
-El bot solicitará la URL:
-
-    🔗 Envíame la URL del producto que quieres vigilar.
-
-Ejemplo:
-
-    https://www.lidl.es/p/parkside-set-de-llaves-de-vaso-216-piezas/p100401392
-
-El bot analizará el producto y creará el seguimiento.
-
-### Consultar productos
-
-Comando:
-
-    /list
-
-Ejemplo:
-```
-📋 Tus seguimientos:
-
-#1
-🛒 Set de llaves Parkside 216 piezas
-💶 59.99€
+BOT_TOKEN=xxxxxxxx
 ```
 
-### Eliminar seguimiento
+---
 
-Comando:
+# Ejecución
 
-    /remove ID
-
-Ejemplo:
-
-    /remove 1
-
-Elimina únicamente el seguimiento del usuario actual.
-
-El producto seguirá disponible para otros usuarios.
-
-### Ayuda
-
-Comando:
-
-    /help
-
-Muestra los comandos disponibles.
-
-## Monitorización automática
-
-El monitor se puede ejecutar manualmente:
-
-    python monitor.py
-
-Ejemplo de salida:
-
-Sin cambios: Set de llaves Parkside 216 piezas
-
-## Programación con cron
-
-Editar:
-
-    crontab -e
-
-Añadir:
-
-    0 * * * * flock -n /tmp/pricelidl-monitor.lock /home/usuario/scripts/telegram_bot_prices/.venv/bin/python /home/usuario/scripts/telegram_bot_prices/monitor.py >> /home/usuario/scripts/telegram_bot_prices/monitor.log 2>&1
-
-Esto ejecuta el monitor cada hora evitando ejecuciones simultáneas.
-
-## Convertir el script en un servicio
-
-### Crear un archivo con el formato adecuado
-
-    sudo nano /etc/systemd/system/alertpricebot.service
+## Bot Telegram
 
 ```
-[Unit]
-Description=Price Telegram Bot
-After=network.target
-
-[Service]
-User=david
-WorkingDirectory=/home/david/scripts/telegram_bot_prices
-ExecStart=/home/david/scripts/telegram_bot_prices/.venv/bin/python /home/david/scripts/telegram_bot_prices/bot.py
-Restart=always
-RestartSec=10
-
-[Install]
-WantedBy=multi-user.target
+python3 bot.py
 ```
 
-### Activar el servicio
+Debe mostrar:
 
 ```
-sudo systemctl daemon-reload
-sudo systemctl enable alertpricebot
-sudo systemctl start alertpricebot
+Bot iniciado
 ```
 
-### Verificar
+---
+
+## Monitor
+
+Ejecutar manualmente:
 
 ```
-systemctl status alertpricebot
+python3 monitor.py
 ```
 
-### Ver los logs
+o mediante cron.
 
-```
-journalctl -u alertpricebot -f
-```
+---
 
-## Script monitor.py
+# Añadir nuevos comercios
 
-Script que envía los mensajes con los cambios de precios de los productos suscritos por los usuarios
+Para incorporar un nuevo comercio:
 
-
-## Añadir nuevos comercios
-
-La arquitectura está preparada para añadir nuevos scrapers.
+1. Crear un scraper dentro de `scrapers/`.
+2. Añadir la identificación del comercio en `router.py`.
+3. Crear el registro correspondiente en la tabla `comercios`.
+4. Añadir sus selectores HTML en `scraper_config`.
 
 Ejemplo futuro:
 
 ```
 scrapers/
-│
+
 ├── lidl.py
 ├── amazon.py
+├── mediamarkt.py
 └── decathlon.py
 ```
 
-Cada scraper deberá devolver:
+---
+
+# Gestión de errores
+
+El proyecto utiliza excepciones específicas:
+
+* Producto no encontrado.
+* Precio no localizado.
+* Nombre no localizado.
+* Comercio no soportado.
+* Error de conexión.
+
+Esto permite distinguir entre:
+
+* un producto eliminado;
+* un cambio en la web;
+* un fallo temporal de red.
+
+---
+
+# Estado actual
+
+Proyecto en fase de evolución.
+
+Versión actual:
 
 ```
-{
-    "nombre": "Nombre producto",
-    "precio": "59.99€"
-}
+1.x
 ```
 
-El monitor podrá seleccionar automáticamente el scraper adecuado según la URL.
+Próximos objetivos:
 
-## Mejoras futuras
+* Sistema de migraciones de base de datos.
+* Historial de precios.
+* Más comercios.
+* Mejor gestión de errores.
+* Panel de administración.
+* Configuración avanzada por usuario.
 
-Posibles evoluciones:
+---
 
-- Confirmación antes de crear seguimiento.
-- Precio objetivo ("avísame cuando baje de X").
-- Historial de precios.
-- Gráficas de evolución.
-- Soporte para más tiendas.
-- Panel web de administración.
-- Gestión de usuarios.
-- Límites de productos por usuario.
-- Dockerización completa.
+# Licencia
 
-## Licencia
+Pendiente de definir.
 
-Proyecto personal para uso privado.
+---
+
+Desarrollado con Python, SQLite y Telegram Bot API.
