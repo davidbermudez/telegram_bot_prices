@@ -1,9 +1,9 @@
 import requests
 
 import database
-from scraper import obtener_datos_producto
+from scrapers.router import get_scraper
 from config import BOT_TOKEN
-
+from exceptions import PriceMonitorError
 
 def enviar_telegram(chat_id, mensaje):
 
@@ -27,7 +27,9 @@ def comprobar_productos():
 
         try:
 
-            datos = obtener_datos_producto(url)
+            scraper = get_scraper(url)
+
+            datos = scraper(url)
 
             precio_actual = datos["precio"]
 
@@ -75,11 +77,22 @@ def comprobar_productos():
                 )
 
 
+        except PriceMonitorError as e:
+
+            print(
+                f"⚠️ Error procesando "
+                f"{url}: {e}"
+            )
+
+            continue
+
         except Exception as e:
 
             print(
-                f"Error con {url}: {e}"
+                f"❌ Error inesperado: {e}"
             )
+
+            continue
 
 
 if __name__ == "__main__":

@@ -8,11 +8,30 @@ from telegram.ext import (
     filters
 )
 from config import BOT_TOKEN
-from scraper import obtener_datos_producto
+from scrapers.router import get_scraper
+from exceptions import (
+    PriceMonitorError,
+    UnsupportedStoreError,
+    InvalidProductURLError,
+    ProductNotFoundError,
+    PriceNotFoundError,
+    ProductNameNotFoundError,
+    NetworkError,
+)
 
 import database
 
 ESPERANDO_URL = 1
+
+# errores
+async def error_handler(
+    update,
+    context
+):
+
+    print(
+        f"Error: {context.error}"
+    )
 
 
 # command start
@@ -94,16 +113,6 @@ Muestra esta ayuda.
     )
 
 
-# command add
-async def add(update: Update, context: ContextTypes.DEFAULT_TYPE):
-
-    await update.message.reply_text(
-        "🔗 Envíame la URL del producto que quieres vigilar."
-    )
-
-    return ESPERANDO_URL
-
-
 # cancelar
 async def cancelar(
     update: Update,
@@ -122,6 +131,16 @@ async def add_inicio(
     context: ContextTypes.DEFAULT_TYPE
 ):
 
+    if context.args:
+
+        url = " ".join(context.args)
+
+        return await procesar_url(
+            update,
+            context,
+            url
+        )
+
     await update.message.reply_text(
         "🔗 Envíame la URL del producto que quieres vigilar."
     )
@@ -129,14 +148,13 @@ async def add_inicio(
     return ESPERANDO_URL
 
 
-async def recibir_url(
+async def procesar_url(
     update: Update,
-    context: ContextTypes.DEFAULT_TYPE
+    context: ContextTypes.DEFAULT_TYPE,
+    url: str
 ):
 
     chat_id = update.effective_chat.id
-
-    url = update.message.text.strip()
 
     if not url.startswith("http"):
 
@@ -153,13 +171,17 @@ async def recibir_url(
 
     try:
 
-        datos = obtener_datos_producto(url)
+        scraper_info = get_scraper(url)
 
-        usuario_id = database.obtener_usuario(
-            chat_id
+        datos = scraper_info["funcion"](
+            url,
+            scraper_info["comercio_id"]
         )
 
+        usuario_id = database.obtener_usuario(chat_id)
+
         producto_id = database.crear_producto(
+            scraper_info["comercio_id"],
             url,
             datos["nombre"],
             datos["precio"]
@@ -177,17 +199,73 @@ async def recibir_url(
             "Te avisaré cuando cambie."
         )
 
-    except Exception as e:
+    except UnsupportedStoreError:
 
         await update.message.reply_text(
-            f"❌ No he podido analizar el producto.\n\n"
-            f"{str(e)}"
+            "❌ Este comercio todavía no está soportado."
+        )
+
+    except InvalidProductURLError:
+
+        await update.message.reply_text(
+            "❌ La URL no corresponde a un producto válido."
+        )
+
+    except ProductNotFoundError:
+
+        await update.message.reply_text(
+            "❌ El producto ya no está disponible."
+        )
+
+    except PriceNotFoundError:
+
+        await update.message.reply_text(
+            "⚠️ He encontrado el producto, pero no he podido localizar su precio."
+        )
+
+    except ProductNameNotFoundError:
+
+        await update.message.reply_text(
+            "⚠️ He encontrado la página, pero no he podido identificar el nombre del producto."
+        )
+
+    except NetworkError:
+
+        await update.message.reply_text(
+            "🌐 No he podido conectar con la tienda. Inténtalo de nuevo dentro de unos minutos."
+        )
+
+    except PriceMonitorError as e:
+
+        await update.message.reply_text(
+            f"⚠️ {e}"
+        )
+
+    except Exception as e:
+
+        print(e)
+
+        await update.message.reply_text(
+            "❌ Se ha producido un error interno."
         )
 
     return ConversationHandler.END
 
 
-# 
+async def recibir_url(
+    update: Update,
+    context: ContextTypes.DEFAULT_TYPE
+):
+
+    url = update.message.text.strip()
+
+    return await procesar_url(
+        update,
+        context,
+        url
+    )
+
+
 async def list_products(
     update: Update,
     context: ContextTypes.DEFAULT_TYPE
@@ -195,8 +273,10 @@ async def list_products(
 
     chat_id = update.effective_chat.id
 
-    productos = database.listar_productos_usuario(
-        chat_id
+    usuario_id = database.obtener_usuario(chat_id)
+
+    productos = database.obtener_seguimientos_usuario(
+        usuario_id
     )
 
     if not productos:
@@ -211,13 +291,13 @@ async def list_products(
     mensaje = "📋 Tus seguimientos:\n\n"
 
 
-    for producto in productos:
+    for numero, producto in enumerate(productos, start=1):
 
         mensaje += (
-            f"#{producto[0]}\n"
-            f"🛒 {producto[1]}\n"
+            f"{numero}️⃣ {producto[1]}\n"
             f"💶 {producto[2]}\n\n"
         )
+
 
     await update.message.reply_text(
         mensaje
@@ -232,7 +312,6 @@ async def remove(
 
     chat_id = update.effective_chat.id
 
-
     if not context.args:
 
         await update.message.reply_text(
@@ -243,7 +322,7 @@ async def remove(
 
     try:
 
-        producto_id = int(
+        posicion = int(
             context.args[0]
         )
 
@@ -255,8 +334,27 @@ async def remove(
 
         return
 
+
+    usuario_id = database.obtener_usuario(chat_id)
+
+
+    producto_id = database.obtener_producto_por_posicion(
+        usuario_id,
+        posicion
+    )
+
+
+    if producto_id is None:
+
+        await update.message.reply_text(
+            "⚠️ No existe ese seguimiento."
+        )
+
+        return
+
+
     eliminado = database.eliminar_seguimiento(
-        chat_id,
+        usuario_id,
         producto_id
     )
 
@@ -270,7 +368,7 @@ async def remove(
     else:
 
         await update.message.reply_text(
-            "⚠️ No existe ese seguimiento"
+            "⚠️ No se pudo eliminar el seguimiento"
         )
 
 
@@ -306,12 +404,12 @@ async def post_init(application):
 
 def main():
 
-    database.inicializar()
-
     app = Application.builder()\
         .token(BOT_TOKEN)\
         .post_init(post_init)\
         .build()
+
+    app.add_error_handler(error_handler)
 
     app.add_handler(
         CommandHandler("start", start)
