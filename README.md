@@ -240,7 +240,7 @@ Editar:
 
 Añadir:
 
-    0 * * * * flock -n /tmp/pricelidl-monitor.lock /home/usuario/scripts/lidl-monitor/.venv/bin/python /home/usuario/scripts/lidl-monitor/monitor.py >> /home/usuario/scripts/lidl-monitor/monitor.log 2>&1
+    0 * * * * flock -n /tmp/pricelidl-monitor.lock /home/usuario/scripts/telegram_bot_prices/.venv/bin/python /home/usuario/scripts/telegram_bot_prices/monitor.py >> /home/usuario/scripts/telegram_bot_prices/monitor.log 2>&1
 
 Esto ejecuta el monitor cada hora evitando ejecuciones simultáneas.
 
@@ -248,17 +248,17 @@ Esto ejecuta el monitor cada hora evitando ejecuciones simultáneas.
 
 ### Crear un archivo con el formato adecuado
 
-    sudo nano /etc/systemd/system/pricelidlbot.service
+    sudo nano /etc/systemd/system/alertpricebot.service
 
 ```
 [Unit]
-Description=PriceLidl Telegram Bot
+Description=Price Telegram Bot
 After=network.target
 
 [Service]
 User=david
-WorkingDirectory=/home/david/scripts/lidl-monitor
-ExecStart=/home/david/scripts/lidl-monitor/.venv/bin/python /home/david/scripts/lidl-monitor/bot.py
+WorkingDirectory=/home/david/scripts/telegram_bot_prices
+ExecStart=/home/david/scripts/telegram_bot_prices/.venv/bin/python /home/david/scripts/telegram_bot_prices/bot.py
 Restart=always
 RestartSec=10
 
@@ -270,20 +270,20 @@ WantedBy=multi-user.target
 
 ```
 sudo systemctl daemon-reload
-sudo systemctl enable pricelidlbot
-sudo systemctl start pricelidlbot
+sudo systemctl enable alertpricebot
+sudo systemctl start alertpricebot
 ```
 
 ### Verificar
 
 ```
-systemctl status pricelidlbot
+systemctl status alertpricebot
 ```
 
 ### Ver los logs
 
 ```
-journalctl -u pricelidlbot -f
+journalctl -u alertpricebot -f
 ```
 
 ## Script monitor.py
