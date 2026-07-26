@@ -29,8 +29,10 @@ def comprobar_productos():
 
             scraper_info = get_scraper(url)
 
+            url_scraper = scraper_info.get("url",url)
+
             datos = scraper_info["funcion"](
-                url,
+                url_scraper,
                 comercio_id
             )
 

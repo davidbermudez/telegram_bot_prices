@@ -8,7 +8,6 @@ def conectar():
     return sqlite3.connect(DB_PATH)
 
 
-
 # -------------------------
 # Usuarios
 # -------------------------
@@ -33,7 +32,6 @@ def crear_usuario(telegram_id):
 
     conn.commit()
     conn.close()
-
 
 
 def obtener_usuario(telegram_id):
@@ -84,7 +82,7 @@ def obtener_comercio_por_dominio(
 
         FROM comercios
 
-        WHERE dominio = ?
+        WHERE ? LIKE '%' || dominio
         AND activo = 1
         """,
         (
@@ -216,12 +214,14 @@ def obtener_productos_monitorizacion():
     cursor.execute(
         """
         SELECT
-            id,
-            url,
-            nombre,
-            precio_actual,
-            comercio_id
+            productos.id,
+            productos.url,
+            productos.nombre,
+            productos.precio_actual,
+            productos.comercio_id
         FROM productos
+        INNER JOIN seguimientos
+            ON productos.id = seguimientos.producto_id
         """
     )
 
